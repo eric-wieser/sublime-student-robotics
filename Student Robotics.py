@@ -72,7 +72,7 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 			return [
 				{
 					"path": path.join('/media', name),
-					"name": name
+					"name": None
 				}
 				for name in os.listdir('/media')
 			]
