@@ -1,4 +1,4 @@
 {
-	"pyenv-location": "V:/Repos/pyenv",
+	"pyenv-location": "~/git/pyenv",
 	"ignore": [".git", ".gitignore", ".gitmodules", "*.zip"]
 }

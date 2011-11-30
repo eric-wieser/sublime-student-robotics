@@ -1,22 +1,17 @@
+import os
+WINDOWS = os.name == 'nt'
 import sublime
 import sublime_plugin
-import os
 import os.path as path
 import string
 import tempfile
 import shutil
-import ctypes
 import datetime
 import zipfile
-import time
+if WINDOWS:
+	import ctypes
 
 class DeployZipCommand(sublime_plugin.WindowCommand):
-	def setStatus(self, key, status):
-		for view in self.window.views():
-			view.set_status(key, status)
-	def eraseStatus(self, key):
-		for view in self.window.views():
-			view.erase_status(key)
 	def __init__(self, *args, **kwargs):
 		self.tmpd = None
 		sublime_plugin.WindowCommand.__init__(self, *args, **kwargs)
@@ -48,30 +43,40 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 
 		return zipLocation
 
-	def getDriveName(self, letter):
-		volumeNameBuffer = ctypes.create_unicode_buffer(512)
-		fileSystemNameBuffer = ctypes.create_unicode_buffer(512)
-
-		ctypes.windll.kernel32.GetVolumeInformationW(
-			ctypes.c_wchar_p(letter),
-			volumeNameBuffer, ctypes.sizeof(volumeNameBuffer),
-			None, None, None,
-			fileSystemNameBuffer, ctypes.sizeof(fileSystemNameBuffer)
-		)
-
-		return volumeNameBuffer.value
-
 	def getDrives(self):
-		ctypes.windll.kernel32.SetErrorMode(1)
-		driveBits = ctypes.windll.kernel32.GetLogicalDrives()
-		return [
-			{
-				"path": letter + ":\\",
-				"name": self.getDriveName(letter + ":\\")
-			}
-			for i, letter in enumerate(string.uppercase)
-			if (driveBits >> i) & 1
-		]
+		if WINDOWS:
+			def getDriveName(letter):
+				volumeNameBuffer = ctypes.create_unicode_buffer(512)
+				fileSystemNameBuffer = ctypes.create_unicode_buffer(512)
+
+				ctypes.windll.kernel32.GetVolumeInformationW(
+					ctypes.c_wchar_p(letter),
+					volumeNameBuffer, ctypes.sizeof(volumeNameBuffer),
+					None, None, None,
+					fileSystemNameBuffer, ctypes.sizeof(fileSystemNameBuffer)
+				)
+
+				return volumeNameBuffer.value
+
+			ctypes.windll.kernel32.SetErrorMode(1)
+			driveBits = ctypes.windll.kernel32.GetLogicalDrives()
+			return [
+				{
+					"path": letter + ":\\",
+					"name": getDriveName(letter + ":\\")
+				}
+				for i, letter in enumerate(string.uppercase)
+				if (driveBits >> i) & 1
+			]
+		else:
+			return [
+				{
+					"path": path.join('/media', name),
+					"name": name
+				}
+				for name in os.listdir('/media')
+			]
+		
 
 
 	def run(self):
@@ -95,7 +100,11 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 			for folder in self.window.folders()
 			if path.exists(path.join(folder, '.git')) and path.exists(path.join(folder, 'robot.py'))
 		]
-
+		
+		if not userPaths:
+			sublime.status_message("Can't find source code")
+			return
+		
 		sublime.status_message("Exporting from %s..."%userPaths[0])
 
 		def onDriveChosen(x):
