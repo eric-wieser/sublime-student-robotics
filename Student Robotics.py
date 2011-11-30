@@ -9,6 +9,7 @@ import shutil
 import datetime
 import zipfile
 import fnmatch
+import re
 if WINDOWS:
 	import ctypes
 
@@ -50,7 +51,23 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 
 		zip = zipfile.ZipFile(tempZip, 'a', zipfile.ZIP_DEFLATED)
 		rootlen = len(userCodePath) + 1
-		
+	
+
+		# transform glob patterns to regular expressions
+		ignore = r'|'.join([fnmatch.translate(pattern) for pattern in ignorePatterns]) or r'$.'
+
+		for root, dirs, files in os.walk(userCodePath):
+		    # exclude dirs
+		    dirs[:] = [os.path.join(root, d) for d in dirs]
+		    dirs[:] = [d for d in dirs if not re.match(ignore, d)]
+
+		    # exclude/include files
+		    files = [os.path.join(root, f) for f in files]
+		    files = [f for f in files if not re.match(ignore, f)]
+
+		    for fname in files:
+		        print fname
+
 		for base, dirs, files in os.walk(userCodePath):
 			for file in files:
 				ignore = False
