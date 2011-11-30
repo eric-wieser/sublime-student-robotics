@@ -1,5 +1,4 @@
 import os
-WINDOWS = os.name == 'nt'
 import sublime
 import sublime_plugin
 import os.path as path
@@ -10,8 +9,15 @@ import datetime
 import zipfile
 import fnmatch
 import re
+
+WINDOWS = os.name == 'nt'
 if WINDOWS:
 	import ctypes
+
+PLUGIN_DIRECTORY = os.getcwd()
+
+#Apparently needed. We'll see.
+#.replace(os.path.normpath(os.path.join(os.getcwd(), '..', '..')) + os.path.sep, '').replace(os.path.sep, '/')
 
 class DeployZipCommand(sublime_plugin.WindowCommand):
 	def __init__(self, *args, **kwargs):
@@ -44,42 +50,35 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 		zip.close()
 
 		return zipLocation
-	def makeZipNew(self, userCodePath, zipLocation, ignorePatterns = []):
-		self.tmpd = tempfile.mkdtemp(suffix="-sr")
-		tempZip = path.join(self.tmpd, "zip")
-		shutil.copyfile(zipLocation, tempZip)
 
-		zip = zipfile.ZipFile(tempZip, 'a', zipfile.ZIP_DEFLATED)
+	def makeZipNew(self, userCodePath, ignorePatterns = []):
+		#Transform ignorePatterns (globs) to regular expressions
+		ignore = re.compile(r'|'.join(map(fnmatch.translate, ignorePatterns)) or r'$.')
 		rootlen = len(userCodePath) + 1
-	
 
-		# transform glob patterns to regular expressions
-		ignore = r'|'.join([fnmatch.translate(pattern) for pattern in ignorePatterns]) or r'$.'
+		#Make a temporary folder
+		self.tmpd = tempfile.mkdtemp(suffix="-sr")
+
+		#Copy the premade zip into it
+		zipPath = path.join(self.tmpd, "zip")
+		shutil.copyfile(path.join(PLUGIN_DIRECTORY, 'robot.zip'), zipPath)
+
+		#Open the zip for modification
+		zip = zipfile.ZipFile(zipPath, 'a', zipfile.ZIP_DEFLATED)
 
 		for root, dirs, files in os.walk(userCodePath):
-		    # exclude dirs
-		    dirs[:] = [os.path.join(root, d) for d in dirs]
-		    dirs[:] = [d for d in dirs if not re.match(ignore, d)]
+		    # exclude files and dirs - colon syntax actually modifies the array
+		    dirs[:] = [d for d in dirs if not ignore.match(d)]
+		    files = [f for f in files if not ignore.match(f)]
 
-		    # exclude/include files
-		    files = [os.path.join(root, f) for f in files]
-		    files = [f for f in files if not re.match(ignore, f)]
+		    #Make full paths
 
-		    for fname in files:
-		        print fname
-
-		for base, dirs, files in os.walk(userCodePath):
-			for file in files:
-				ignore = False
-				for pattern in ignorePatterns:
-					ignore = ignore or fnmatch.fnmatch(file, pattern)
-				
-				if not ignore:
-					fn = path.join(base, file)
-					zip.write(fn, path.join("user",fn[rootlen:]))
+		    for fname in (os.path.join(root, f) for f in files):
+				zip.write(fname, path.join("user", fname[rootlen:]))
 		zip.close()
 
-		return tempZip
+		return zipPath
+
 	def getDrives(self):
 		if WINDOWS:
 			def getDriveName(letter):
@@ -103,7 +102,7 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 					"name": getDriveName(letter + ":\\")
 				}
 				for i, letter in enumerate(string.uppercase)
-				if (driveBits >> i) & 1
+				if 'A' != letter != 'Z' and (driveBits >> i) & 1 #hack for network
 			]
 		else:
 			return [
@@ -113,14 +112,17 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 				}
 				for name in os.listdir('/media')
 			]
-		
-
 
 	def run(self):
 		s = sublime.load_settings("Student Robotics.sublime-settings")
-		pyenvLocation = path.join(s.get('pyenv-location'), 'pyenv')
 		ignorePatterns = s.get('ignore')
+
+		#Sort out drives
 		drives = self.getDrives()
+
+		if not drives:
+			sublime.status_message("No memory stick!")
+			return
 
 		for drive in drives:
 			drive["srobo"] = path.exists(path.join(drive["path"], ".srobo"))#
@@ -129,9 +131,9 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 			except:
 				drive["last-deployed"] = None
 
-
 		drives.sort(key=lambda a: a["srobo"], reverse=True)
 
+		#Find potential code locations
 		userPaths = [
 			folder
 			for folder in self.window.folders()
@@ -144,24 +146,45 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 		
 		sublime.status_message("Exporting from %s..."%userPaths[0])
 
-		def onDriveChosen(x):
-			if x < 0:
-				pass
+		#Build the messages for the quickpanel
+		messages = []
+		for drive in drives:			
+			title = "Deploy to "
+			if drive["name"]:
+				title += "\"%s\" (%s)" % (drive["name"], drive["path"])
 			else:
+				title += drive["path"]
+			
+			info = []
+			if drive["srobo"]:
+				info.append("Robot Memory Stick")
+
+			if drive["last-deployed"]:
+				info.append("Last deployed on "+ drive["last-deployed"].strftime("%x @ %X"))
+			else:
+				info.append("No past deployment")
+			
+			try:
+				logFiles = len([f for f in os.listdir(drive["path"]) if re.match('log.txt', f)])
+				if logFiles:
+					info.append("%d logs" % logFiles)
+			except:
+				pass
+
+			messages.append([title, ' - '.join(info)])
+
+		def onDriveChosen(x):
+			if x >= 0:
 				drive = drives[x]
-				theZip = self.makeZipNew(userPaths[0], s.get('prebuilt-zip'), ignorePatterns)#(userPaths[0], pyenvLocation, ignorePatterns)
+				theZip = self.makeZipNew(
+					userPaths[0],
+					ignorePatterns
+				)
 				target = os.path.join(drive["path"], "robot.zip")
 				shutil.copyfile(theZip, target)
 				shutil.rmtree(self.tmpd)
-				sublime.status_message("Zip deployed successfully to %s!"%target)
+				sublime.status_message("Zip deployed successfully to %s!" % target)
 
-		self.window.show_quick_panel([
-			[
-				"Deploy to " + ("%s (%s)" % (drive["name"], drive["path"]) if drive["name"] else drive["path"]),
-				"%s - %s" % (
-					drive["srobo"] and "SR Memory Stick" or "Other Device",
-					"Last deployed on "+ drive["last-deployed"].strftime("%x @ %X") if drive["last-deployed"] else "No past deployment")
-			] for drive in drives
-		], onDriveChosen)
+		self.window.show_quick_panel(messages, onDriveChosen)
 
 
