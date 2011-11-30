@@ -8,6 +8,7 @@ import tempfile
 import shutil
 import datetime
 import zipfile
+import fnmatch
 if WINDOWS:
 	import ctypes
 
@@ -36,13 +37,32 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 		zip = zipfile.ZipFile(zipLocation, 'w', zipfile.ZIP_DEFLATED)
 		rootlen = len(zipContents) + 1
 		for base, dirs, files in os.walk(zipContents):
-		    for file in files:
-		        fn = path.join(base, file)
-		        zip.write(fn, fn[rootlen:])
+			for file in files:
+				fn = path.join(base, file)
+				zip.write(fn, fn[rootlen:])
 		zip.close()
 
 		return zipLocation
+	def makeZipNew(self, userCodePath, zipLocation, ignorePatterns = []):
+		self.tmpd = tempfile.mkdtemp(suffix="-sr")
+		tempZip = path.join(self.tmpd, "zip")
+		shutil.copyfile(zipLocation, tempZip)
 
+		zip = zipfile.ZipFile(tempZip, 'a', zipfile.ZIP_DEFLATED)
+		rootlen = len(userCodePath) + 1
+		
+		for base, dirs, files in os.walk(userCodePath):
+			for file in files:
+				ignore = False
+				for pattern in ignorePatterns:
+					ignore = ignore or fnmatch.fnmatch(file, pattern)
+				
+				if not ignore:
+					fn = path.join(base, file)
+					zip.write(fn, path.join("user",fn[rootlen:]))
+		zip.close()
+
+		return tempZip
 	def getDrives(self):
 		if WINDOWS:
 			def getDriveName(letter):
@@ -112,7 +132,7 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 				pass
 			else:
 				drive = drives[x]
-				theZip = self.makeZip(userPaths[0], pyenvLocation, ignorePatterns)
+				theZip = self.makeZipNew(userPaths[0], s.get('prebuilt-zip'), ignorePatterns)#(userPaths[0], pyenvLocation, ignorePatterns)
 				target = os.path.join(drive["path"], "robot.zip")
 				shutil.copyfile(theZip, target)
 				sublime.status_message("Zip deployed successfully to %s!"%target)
