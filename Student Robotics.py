@@ -222,12 +222,16 @@ class ShowLogCommand(sublime_plugin.WindowCommand):
 		s = sublime.load_settings("Student Robotics.sublime-settings")
 		drives = getRobotDrives(s.get('ignore-drives'))
 		messages = []
+
 		for drive in drives:
-			messages.append([drive["path"], "log, log, log"])
+			if path.exists(path.join(drive["path"], "log.txt")):
+				messages.append([drive["path"], "log, log, log"])
+				num  = glob.glob(path.join(drive["path"], "log.*"))
 
 		def f(x):
 			logs = ''
-			num  = glob.glob(path.join(drive["path"], "log.*"))
+			print drive["path"]
+			print num
 			for files in range (0, len(num)):
 				log = open(num[files])
 				logs += '_____________________________________________________________________________________\n'
