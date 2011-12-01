@@ -8,6 +8,7 @@ import tempfile
 import shutil
 import datetime
 import zipfile
+import re
 if WINDOWS:
 	import ctypes
 
