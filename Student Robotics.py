@@ -9,6 +9,7 @@ import datetime
 import zipfile
 import fnmatch
 import re
+import glob
 
 WINDOWS = os.name == 'nt'
 if WINDOWS:
@@ -18,6 +19,59 @@ PLUGIN_DIRECTORY = os.getcwd()
 
 #Apparently needed. We'll see.
 #.replace(os.path.normpath(os.path.join(os.getcwd(), '..', '..')) + os.path.sep, '').replace(os.path.sep, '/')
+
+
+def getDrives(self, skip = []):
+	if WINDOWS:
+		def getDriveName(letter):
+			volumeNameBuffer = ctypes.create_unicode_buffer(512)
+			fileSystemNameBuffer = ctypes.create_unicode_buffer(512)
+
+			ctypes.windll.kernel32.GetVolumeInformationW(
+				ctypes.c_wchar_p(letter),
+				volumeNameBuffer, ctypes.sizeof(volumeNameBuffer),
+				None, None, None,
+				fileSystemNameBuffer, ctypes.sizeof(fileSystemNameBuffer)
+			)
+
+			return volumeNameBuffer.value
+
+		ctypes.windll.kernel32.SetErrorMode(1)
+		driveBits = ctypes.windll.kernel32.GetLogicalDrives()
+		return [
+			{
+				"path": letter + ":\\",
+				"name": getDriveName(letter + ":\\")
+			}
+			for i, letter in enumerate(string.uppercase)
+			if letter not in skip and (driveBits >> i) & 1 #hack for network
+		]
+	else:
+		return [
+			{
+				"path": path.join('/media', name),
+				"name": None
+			}
+			for name in os.listdir('/media')
+		]
+def getRobotDrives(ignore):
+#Sort out drives
+	drives = getDrives(ignore)
+
+	if not drives:
+		sublime.status_message("No memory stick!")
+		return
+
+	for drive in drives:
+		drive["srobo"] = path.exists(path.join(drive["path"], ".srobo"))#
+		try:
+			drive["last-deployed"] = datetime.datetime.fromtimestamp(path.getmtime(path.join(drive["path"], "robot.zip")))
+		except:
+			drive["last-deployed"] = None
+
+	drives.sort(key=lambda a: a["srobo"], reverse=True)
+
+	return drives
 
 class DeployZipCommand(sublime_plugin.WindowCommand):
 	def __init__(self, *args, **kwargs):
@@ -67,72 +121,25 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 		zip = zipfile.ZipFile(zipPath, 'a', zipfile.ZIP_DEFLATED)
 
 		for root, dirs, files in os.walk(userCodePath):
-		    # exclude files and dirs - colon syntax actually modifies the array
-		    dirs[:] = [d for d in dirs if not ignore.match(d)]
-		    files = [f for f in files if not ignore.match(f)]
+			# exclude files and dirs - colon syntax actually modifies the array
+			dirs[:] = [d for d in dirs if not ignore.match(d)]
+			files = [f for f in files if not ignore.match(f)]
 
-		    #Make full paths
+			#Make full paths
 
-		    for fname in (os.path.join(root, f) for f in files):
+			for fname in (os.path.join(root, f) for f in files):
 				zip.write(fname, path.join("user", fname[rootlen:]))
 		zip.close()
 
 		return zipPath
 
-	def getDrives(self):
-		if WINDOWS:
-			def getDriveName(letter):
-				volumeNameBuffer = ctypes.create_unicode_buffer(512)
-				fileSystemNameBuffer = ctypes.create_unicode_buffer(512)
-
-				ctypes.windll.kernel32.GetVolumeInformationW(
-					ctypes.c_wchar_p(letter),
-					volumeNameBuffer, ctypes.sizeof(volumeNameBuffer),
-					None, None, None,
-					fileSystemNameBuffer, ctypes.sizeof(fileSystemNameBuffer)
-				)
-
-				return volumeNameBuffer.value
-
-			ctypes.windll.kernel32.SetErrorMode(1)
-			driveBits = ctypes.windll.kernel32.GetLogicalDrives()
-			return [
-				{
-					"path": letter + ":\\",
-					"name": getDriveName(letter + ":\\")
-				}
-				for i, letter in enumerate(string.uppercase)
-				if 'A' != letter != 'Z' and (driveBits >> i) & 1 #hack for network
-			]
-		else:
-			return [
-				{
-					"path": path.join('/media', name),
-					"name": None
-				}
-				for name in os.listdir('/media')
-			]
+	
 
 	def run(self):
 		s = sublime.load_settings("Student Robotics.sublime-settings")
 		ignorePatterns = s.get('ignore')
 
-		#Sort out drives
-		drives = self.getDrives()
-
-		if not drives:
-			sublime.status_message("No memory stick!")
-			return
-
-		for drive in drives:
-			drive["srobo"] = path.exists(path.join(drive["path"], ".srobo"))#
-			try:
-				drive["last-deployed"] = datetime.datetime.fromtimestamp(path.getmtime(path.join(drive["path"], "robot.zip")))
-			except:
-				drive["last-deployed"] = None
-
-		drives.sort(key=lambda a: a["srobo"], reverse=True)
-
+		drives = getRobotDrives(s.get('ignore-drives'))
 		#Find potential code locations
 		userPaths = [
 			folder
@@ -184,7 +191,48 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 				shutil.copyfile(theZip, target)
 				shutil.rmtree(self.tmpd)
 				sublime.status_message("Zip deployed successfully to %s!" % target)
-
 		self.window.show_quick_panel(messages, onDriveChosen)
 
+class ShowLogCommand(sublime_plugin.WindowCommand):
 
+	def get_window(self):
+		return self.window
+	 
+	def _output_to_view(self, output_file, output, clear=False,
+			syntax="Packages/Diff/Diff.tmLanguage"):
+			output_file.set_syntax_file(syntax)
+			edit = output_file.begin_edit()
+			if clear:
+				region = sublime.Region(0, self.output_view.size())
+				output_file.erase(edit, region)
+			output_file.insert(edit, 0, output)
+			output_file.end_edit(edit)
+
+	def scratch(self, output, title=False, **kwargs):
+		scratch_file = self.get_window().new_file()
+		if title:
+			scratch_file.set_name(title)
+		scratch_file.set_scratch(True)
+		self._output_to_view(scratch_file, output, **kwargs)
+		scratch_file.set_read_only(True)
+		return scratch_file
+
+
+	def run(self):
+		s = sublime.load_settings("Student Robotics.sublime-settings")
+		drives = getRobotDrives(s.get('ignore-drives'))
+		messages = []
+		for drive in drives:
+			messages.append([drive["path"], "log, log, log"])
+
+		def f(x):
+			print os.listdir(drive["path"])
+			logs = ''
+			for files in range (0, len(os.listdir(drive["path"]))):
+				log = open(path.join(drive["path"], os.listdir(drive["path"])[files]), 'r')
+				logs += '\n'
+				logs += os.listdir(drive["path"])[files]
+				logs += '\n_____________________________________________________________________________________\n'
+				logs += log.read()
+			self.scratch(logs, title = "log")
+		self.window.show_quick_panel(messages, f)
