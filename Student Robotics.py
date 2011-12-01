@@ -230,8 +230,6 @@ class ShowLogCommand(sublime_plugin.WindowCommand):
 
 		def f(x):
 			logs = ''
-			print drive["path"]
-			print num
 			for files in range (0, len(num)):
 				log = open(num[files])
 				logs += '_____________________________________________________________________________________\n'
