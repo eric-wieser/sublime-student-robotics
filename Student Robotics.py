@@ -226,7 +226,6 @@ class ShowLogCommand(sublime_plugin.WindowCommand):
 			messages.append([drive["path"], "log, log, log"])
 
 		def f(x):
-			print os.listdir(drive["path"])[0]
 			logs = ''
 			num  = glob.glob(path.join(drive["path"], "log.*"))
 			print num
