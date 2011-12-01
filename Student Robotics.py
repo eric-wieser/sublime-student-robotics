@@ -148,6 +148,7 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 				theZip = self.makeZip(userPaths[0], pyenvLocation, ignorePatterns)
 				target = os.path.join(drive["path"], "robot.zip")
 				shutil.copyfile(theZip, target)
+				shutil.rmtree(self.tmpd)
 				sublime.status_message("Zip deployed successfully to %s!"%target)
 
 		self.window.show_quick_panel(messages, onDriveChosen)
