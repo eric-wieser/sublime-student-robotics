@@ -106,7 +106,34 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 			return
 		
 		sublime.status_message("Exporting from %s..."%userPaths[0])
+		
+		#Build the messages for the quickpanel
+		messages = []
+		for drive in drives:			
+			title = "Deploy to "
+			if drive["name"]:
+				title += "\"%s\" (%s)" % (drive["name"], drive["path"])
+			else:
+				title += drive["path"]
+			
+			info = []
+			if drive["srobo"]:
+				info.append("Robot Memory Stick")
 
+			if drive["last-deployed"]:
+				info.append("Last deployed on "+ drive["last-deployed"].strftime("%x @ %X"))
+			else:
+				info.append("No past deployment")
+			
+			try:
+				logFiles = len([f for f in os.listdir(drive["path"]) if re.match('log.txt', f)])
+				if logFiles:
+					info.append("%d logs" % logFiles)
+			except:
+				pass
+
+			messages.append([title, ' - '.join(info)])
+			
 		def onDriveChosen(x):
 			if x < 0:
 				pass
@@ -117,13 +144,6 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 				shutil.copyfile(theZip, target)
 				sublime.status_message("Zip deployed successfully to %s!"%target)
 
-		self.window.show_quick_panel([
-			[
-				"Deploy to " + ("%s (%s)" % (drive["name"], drive["path"]) if drive["name"] else drive["path"]),
-				"%s - %s" % (
-					drive["srobo"] and "SR Memory Stick" or "Other Device",
-					"Last deployed on "+ drive["last-deployed"].strftime("%x @ %X") if drive["last-deployed"] else "No past deployment")
-			] for drive in drives
-		], onDriveChosen)
+		self.window.show_quick_panel(messages, onDriveChosen)
 
 
