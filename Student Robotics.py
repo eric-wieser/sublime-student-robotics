@@ -83,7 +83,12 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 		s = sublime.load_settings("Student Robotics.sublime-settings")
 		pyenvLocation = path.join(s.get('pyenv-location'), 'pyenv')
 		ignorePatterns = s.get('ignore')
+		
 		drives = self.getDrives()
+		
+		if not drives:
+			sublime.status_message("No memory stick!")
+			return
 
 		for drive in drives:
 			drive["srobo"] = path.exists(path.join(drive["path"], ".srobo"))#
