@@ -230,6 +230,7 @@ class ShowLogCommand(sublime_plugin.WindowCommand):
 			num  = glob.glob(path.join(drive["path"], "log.*"))
 			for files in range (0, len(num)):
 				log = open(num[files])
+				logs += '_____________________________________________________________________________________\n'
 				logs += num[files]
 				logs += '\n_____________________________________________________________________________________\n'
 				logs += log.read()
