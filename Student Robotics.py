@@ -226,12 +226,14 @@ class ShowLogCommand(sublime_plugin.WindowCommand):
 			messages.append([drive["path"], "log, log, log"])
 
 		def f(x):
-			print os.listdir(drive["path"])
+			print os.listdir(drive["path"])[0]
 			logs = ''
-			for files in range (0, len(os.listdir(drive["path"]))):
-				log = open(path.join(drive["path"], os.listdir(drive["path"])[files]), 'r')
+			num  = glob.glob(path.join(drive["path"], "log.*"))
+			print num
+			for files in range (0, len(num)):
+				log = open(num[files])
 				logs += '\n'
-				logs += os.listdir(drive["path"])[files]
+				logs += num[files]
 				logs += '\n_____________________________________________________________________________________\n'
 				logs += log.read()
 			self.scratch(logs, title = "log")
