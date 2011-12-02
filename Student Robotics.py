@@ -225,7 +225,8 @@ class ShowLogCommand(sublime_plugin.WindowCommand):
 			drive["logs"] = glob.glob(path.join(drive["path"], 'log.*'))
 			if drive["logs"]:
 				messages.append([
-					drive["path"],
+					"\"%s\" (%s)" % (drive["name"], drive["path"]),
+					#drive["path"] + drive["name"],
 					"%d log files" % len(drive["logs"])
 				])
 
