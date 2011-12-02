@@ -193,12 +193,12 @@ class ShowLogCommand(sublime_plugin.WindowCommand):
 	A command that shows the Student Robotics logs from a given flash drive
 	"""
 	def _output_to_view(self, output_file, output, clear=False):
-		edit = output_file.begin_edit()
-		if clear:
-			region = sublime.Region(0, self.output_view.size())
-			output_file.erase(edit, region)
-		output_file.insert(edit, 0, output)
-		output_file.end_edit(edit)
+			edit = output_file.begin_edit()
+			if clear:
+				region = sublime.Region(0, self.output_view.size())
+				output_file.erase(edit, region)
+			output_file.insert(edit, 0, output)
+			output_file.end_edit(edit)
 
 	def scratch(self, output, title=False, **kwargs):
 		scratch_file = self.window.new_file()
@@ -211,6 +211,7 @@ class ShowLogCommand(sublime_plugin.WindowCommand):
 
 
 	def run(self):
+
 		#load settings, get drives
 		s = sublime.load_settings('Student Robotics.sublime-settings')
 		drives = RobotDrive.getDrives(s.get('ignore-drives'))
