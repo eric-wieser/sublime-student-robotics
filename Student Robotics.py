@@ -220,24 +220,31 @@ class ShowLogCommand(sublime_plugin.WindowCommand):
 		s = sublime.load_settings("Student Robotics.sublime-settings")
 		drives = getRobotDrives(s.get('ignore-drives'))
 		messages = []
-		num = []
 
 		for drive in drives:
-			if path.exists(path.join(drive["path"], "log.txt")):
-				messages.append([drive["path"], "log, log, log"])
-				num  = glob.glob(path.join(drive["path"], "log.*"))
+			drive["logs"] = glob.glob(path.join(drive["path"], 'log.*'))
+			if drive["logs"]:
+				messages.append([
+					drive["path"],
+					"%d log files" % len(drive["logs"])
+				])
 
 		def f(x):
-			logs = ''
-			if num != []:
-				for files in range (0, len(num)):
-					log = open(num[files])
-					logs += '_____________________________________________________________________________________\n'
-					logs += num[files]
-					logs += '\n_____________________________________________________________________________________\n'
-					logs += log.read()
-					logs += '\n'
-				self.scratch(logs, title = "log")
-			else:
-				sublime.status_message("No log files!")
+			if x >= 0:
+				drive = drives[x]
+
+				logs = []
+
+				for f in drive["logs"]:
+					modified = datetime.datetime.fromtimestamp(path.getmtime(f))
+					log = open(f)
+					logs.append(
+						modified.strftime("%x @ %X") +
+						'  ' +
+						f + '\n' +
+						'=' * 80 + '\n' +
+						log.read()
+					)
+				self.scratch('\n\n'.join(logs), title = "log")
+
 		self.window.show_quick_panel(messages, f)
