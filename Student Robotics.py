@@ -20,15 +20,15 @@ PLUGIN_DIRECTORY = os.getcwd()
 #Apparently needed. We'll see.
 #.replace(os.path.normpath(os.path.join(os.getcwd(), '..', '..')) + os.path.sep, '').replace(os.path.sep, '/')
 
-
-def getDrives(self, skip = []):
-	if WINDOWS:
-		def getDriveName(letter):
-			volumeNameBuffer = ctypes.create_unicode_buffer(512)
+class Drive(object):
+	@staticmethod
+	def getNameFromPath(path):
+		if WINDOWS:
 			fileSystemNameBuffer = ctypes.create_unicode_buffer(512)
+			volumeNameBuffer = ctypes.create_unicode_buffer(512)
 
 			ctypes.windll.kernel32.GetVolumeInformationW(
-				ctypes.c_wchar_p(letter),
+				ctypes.c_wchar_p(path),
 				volumeNameBuffer, ctypes.sizeof(volumeNameBuffer),
 				None, None, None,
 				fileSystemNameBuffer, ctypes.sizeof(fileSystemNameBuffer)
@@ -36,85 +36,85 @@ def getDrives(self, skip = []):
 
 			return volumeNameBuffer.value
 
-		ctypes.windll.kernel32.SetErrorMode(1)
-		driveBits = ctypes.windll.kernel32.GetLogicalDrives()
-		return [
-			{
-				"path": letter + ":\\",
-				"name": getDriveName(letter + ":\\")
-			}
-			for i, letter in enumerate(string.uppercase)
-			if letter not in skip and (driveBits >> i) & 1 #hack for network
-		]
-	else:
-		return [
-			{
-				"path": path.join('/media', name),
-				"name": None
-			}
-			for name in os.listdir('/media')
-		]
-def getRobotDrives(ignore):
-#Sort out drives
-	drives = getDrives(ignore)
+	@classmethod
+	def getDrives(cls, skip = []):
+		if WINDOWS:
+			ctypes.windll.kernel32.SetErrorMode(1)
+			driveBits = ctypes.windll.kernel32.GetLogicalDrives()
+			return [
+				cls(letter + ':\\')
+				for i, letter in enumerate(string.uppercase)
+				if letter not in skip and (driveBits >> i) & 1
+			]
+		else:
+			return [
+				cls(path.join('/media', name))
+				for name in os.listdir('/media')
+			]
 
-	if not drives:
-		sublime.status_message("No memory stick!")
-		return
 
-	for drive in drives:
-		drive["srobo"] = path.exists(path.join(drive["path"], ".srobo"))#
+	def __init__(self, path, name = None):
+		self.path = path
+		self.name = name or Drive.getNameFromPath(path)
+	
+	def __str__(self):
+		if self.name:
+			return '\'%s\' (%s)' % (self.name, self.path)
+		else:
+			return self.path
+
+	def __repr__(self):
+		if self.name:
+			return '%s(path=%s, name=%s)' % (self.__class__.__name__, repr(self.path), repr(self.name))
+		else:
+			return '%s(%s)' % (self.__class__.__name__, repr(self.path))
+	
+class RobotDrive(Drive):
+	def __init__(self, *args, **kargs):
+		Drive.__init__(self, *args, **kargs)
+		
+		self.srobo = path.exists(path.join(self.path, '.srobo'))
+
+		self.zipPath = path.join(self.path, 'robot.zip')
 		try:
-			drive["last-deployed"] = datetime.datetime.fromtimestamp(path.getmtime(path.join(drive["path"], "robot.zip")))
+			self.lastDeployed = datetime.datetime.fromtimestamp(path.getmtime(self.zipPath))
 		except:
-			drive["last-deployed"] = None
+			self.lastDeployed = None
 
-	drives.sort(key=lambda a: a["srobo"], reverse=True)
-
-	return drives
+		self.logs = glob.glob(path.join(self.path, 'log.*'))
+	
+	@classmethod
+	def getDrives(cls, skip = []):
+		drives = super(RobotDrive, cls).getDrives(skip)
+		drives.sort(key = lambda d: d.srobo, reverse = True)
+		return drives
 
 class DeployZipCommand(sublime_plugin.WindowCommand):
+	"""
+	A command that finds the user code, and deploy `robot.zip` to a drive
+	selected by the user
+	"""
+
 	def __init__(self, *args, **kwargs):
 		self.tmpd = None
 		sublime_plugin.WindowCommand.__init__(self, *args, **kwargs)
 
-	def makeZip(self, userCodePath, pyenvPath, ignore):
-		self.tmpd = tempfile.mkdtemp(suffix="-sr")
+	def makeZip(self, userCodePath, ignorePatterns = []):
+		"""
+		Build a SR zip from the specified user code, by copying the code into
+		a pre-configured zip stored in the plugin folder, and store it in a
+		temporary directory. This zip should be updated regularly
+		"""
 
-		ignore = shutil.ignore_patterns(*ignore)
-		zipContents = path.join(self.tmpd, "robot_zip")
-		zipLocation = path.join(self.tmpd, "robot.zip")
-		shutil.copytree(pyenvPath, zipContents, ignore=ignore)
-
-		# Copy in the user's code
-		shutil.copytree(
-			userCodePath,
-			path.join(zipContents, "user"),
-			ignore = ignore
-		)
-
-		#shutil.make_archive(path.join(self.tmpd, "robot"), "zip", self.tmpd)
-
-		zip = zipfile.ZipFile(zipLocation, 'w', zipfile.ZIP_DEFLATED)
-		rootlen = len(zipContents) + 1
-		for base, dirs, files in os.walk(zipContents):
-			for file in files:
-				fn = path.join(base, file)
-				zip.write(fn, fn[rootlen:])
-		zip.close()
-
-		return zipLocation
-
-	def makeZipNew(self, userCodePath, ignorePatterns = []):
 		#Transform ignorePatterns (globs) to regular expressions
 		ignore = re.compile(r'|'.join(map(fnmatch.translate, ignorePatterns)) or r'$.')
 		rootlen = len(userCodePath) + 1
 
 		#Make a temporary folder
-		self.tmpd = tempfile.mkdtemp(suffix="-sr")
+		self.tmpd = tempfile.mkdtemp(suffix='-sr')
 
 		#Copy the premade zip into it
-		zipPath = path.join(self.tmpd, "zip")
+		zipPath = path.join(self.tmpd, 'zip')
 		shutil.copyfile(path.join(PLUGIN_DIRECTORY, 'robot.zip'), zipPath)
 
 		#Open the zip for modification
@@ -128,18 +128,21 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 			#Make full paths
 
 			for fname in (os.path.join(root, f) for f in files):
-				zip.write(fname, path.join("user", fname[rootlen:]))
+				zip.write(fname, path.join('user', fname[rootlen:]))
 		zip.close()
 
 		return zipPath
 
-	
-
 	def run(self):
-		s = sublime.load_settings("Student Robotics.sublime-settings")
+		s = sublime.load_settings('Student Robotics.sublime-settings')
 		ignorePatterns = s.get('ignore')
 
-		drives = getRobotDrives(s.get('ignore-drives'))
+		drives = RobotDrive.getDrives(s.get('ignore-drives'))
+
+		if not drives:
+			sublime.error_message('Is the USB stick plugged in?')
+			return
+
 		#Find potential code locations
 		userPaths = [
 			folder
@@ -148,68 +151,57 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 		]
 		
 		if not userPaths:
-			sublime.status_message("Can't find source code")
+			sublime.error_message('You need to open your project folder in the folder view')
 			return
 		
-		sublime.status_message("Exporting from %s..."%userPaths[0])
+		sublime.status_message('Exporting from %s...'%userPaths[0])
 
 		#Build the messages for the quickpanel
 		messages = []
 		for drive in drives:			
-			title = "Deploy to "
-			if drive["name"]:
-				title += "\"%s\" (%s)" % (drive["name"], drive["path"])
-			else:
-				title += drive["path"]
+			title = 'Deploy to %s' % drive
 			
 			info = []
-			if drive["srobo"]:
-				info.append("Robot Memory Stick")
+			if drive.srobo:
+				info.append('Robot Memory Stick')
 
-			if drive["last-deployed"]:
-				info.append("Last deployed on "+ drive["last-deployed"].strftime("%x @ %X"))
+			if drive.lastDeployed:
+				info.append('Last deployed on '+ drive.lastDeployed.strftime('%x @ %X'))
 			else:
-				info.append("No past deployment")
+				info.append('No past deployment')
 			
-			try:
-				logFiles = len([f for f in os.listdir(drive["path"]) if re.match('log.txt', f)])
-				if logFiles:
-					info.append("%d logs" % logFiles)
-			except:
-				pass
+			if drive.logs:
+				info.append('%d logs' % len(drive.logs))
 
 			messages.append([title, ' - '.join(info)])
 
 		def onDriveChosen(x):
 			if x >= 0:
 				drive = drives[x]
-				theZip = self.makeZipNew(
+				theZip = self.makeZip(
 					userPaths[0],
 					ignorePatterns
 				)
-				target = os.path.join(drive["path"], "robot.zip")
-				shutil.copyfile(theZip, target)
+				shutil.copyfile(theZip, drive.zipPath)
 				shutil.rmtree(self.tmpd)
-				sublime.status_message("Zip deployed successfully to %s!" % target)
+				sublime.status_message('Zip deployed successfully to %s!' % drive.zipPath)
 		self.window.show_quick_panel(messages, onDriveChosen)
 
 class ShowLogCommand(sublime_plugin.WindowCommand):
-
-	def get_window(self):
-		return self.window
-	 
-	def _output_to_view(self, output_file, output, clear=False,
-			syntax="Packages/Diff/Diff.tmLanguage"):
-			output_file.set_syntax_file(syntax)
-			edit = output_file.begin_edit()
-			if clear:
-				region = sublime.Region(0, self.output_view.size())
-				output_file.erase(edit, region)
-			output_file.insert(edit, 0, output)
-			output_file.end_edit(edit)
+	LOG_HEADING_WIDTH = 80
+	"""
+	A command that shows the Student Robotics logs from a given flash drive
+	"""
+	def _output_to_view(self, output_file, output, clear=False):
+		edit = output_file.begin_edit()
+		if clear:
+			region = sublime.Region(0, self.output_view.size())
+			output_file.erase(edit, region)
+		output_file.insert(edit, 0, output)
+		output_file.end_edit(edit)
 
 	def scratch(self, output, title=False, **kwargs):
-		scratch_file = self.get_window().new_file()
+		scratch_file = self.window.new_file()
 		if title:
 			scratch_file.set_name(title)
 		scratch_file.set_scratch(True)
@@ -219,21 +211,50 @@ class ShowLogCommand(sublime_plugin.WindowCommand):
 
 
 	def run(self):
-		s = sublime.load_settings("Student Robotics.sublime-settings")
-		drives = getRobotDrives(s.get('ignore-drives'))
-		messages = []
-		for drive in drives:
-			messages.append([drive["path"], "log, log, log"])
+		#load settings, get drives
+		s = sublime.load_settings('Student Robotics.sublime-settings')
+		drives = RobotDrive.getDrives(s.get('ignore-drives'))
 
-		def f(x):
-			logs = ''
-			num  = glob.glob(path.join(drive["path"], "log.*"))
-			print num
-			for files in range (0, len(num)):
-				log = open(num[files])
-				logs += '\n'
-				logs += num[files]
-				logs += '\n_____________________________________________________________________________________\n'
-				logs += log.read()
-			self.scratch(logs, title = "log")
-		self.window.show_quick_panel(messages, f)
+		#filter out logless drives
+		drives = [drive for drive in drives if drive.logs]
+
+		#build the array of messages for the quickpanel
+		messages = [
+			[drive.path, '%d log files' % len(drive.logs)]
+			for drive in drives
+		]
+
+		def showLogs(x):
+			if x >= 0:
+				drive = drives[x]
+
+				logs = []
+
+				for f in drive.logs:
+					timestamp = path.getmtime(f)
+					dateString = datetime.datetime.fromtimestamp(timestamp).strftime('%x @ %X')
+
+					heading = ''.join([
+						a if a != " " else b
+						for a, b in zip(
+							f.ljust(self.LOG_HEADING_WIDTH),
+							dateString.rjust(self.LOG_HEADING_WIDTH)
+						)
+					])
+
+					log = open(f)
+					logs.append(
+						heading +  '\n' +
+						'=' * self.LOG_HEADING_WIDTH + '\n' +
+						log.read()
+					)
+
+				self.scratch('\n\n'.join(logs), title = 'SR Logs')
+
+		#Only give a choice if there is more than one option
+		if len(messages) > 1:
+			self.window.show_quick_panel(messages, showLogs)
+		elif messages:
+			showLogs(0)
+		else:
+			sublime.error_message('No log files found')
