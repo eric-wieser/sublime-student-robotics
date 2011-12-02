@@ -246,5 +246,6 @@ class ShowLogCommand(sublime_plugin.WindowCommand):
 						log.read()
 					)
 				self.scratch('\n\n'.join(logs), title = "log")
-
+			else:
+				sublime.status_message("No log files!")
 		self.window.show_quick_panel(messages, f)
