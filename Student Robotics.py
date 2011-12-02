@@ -239,7 +239,7 @@ class ShowLogCommand(sublime_plugin.WindowCommand):
 					modified = datetime.datetime.fromtimestamp(path.getmtime(f))
 					log = open(f)
 					logs.append(
-						modified.strftime("%x @ %X") +
+						modified.strftime("%c") +
 						'  ' +
 						f + '\n' +
 						'=' * 80 + '\n' +
