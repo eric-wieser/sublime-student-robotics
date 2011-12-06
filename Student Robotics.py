@@ -101,6 +101,9 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 		self.settings = None
 		sublime_plugin.WindowCommand.__init__(self, *args, **kwargs)
 
+	def is_enabled(self):
+		return bool(self.getProjectFolders())
+
 	def makeZip(self, userCodePath):
 		"""
 		Build a SR zip from the specified user code, by copying the code into
@@ -194,19 +197,33 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 		self.showDriveList(drives, lambda d: self.onDriveChosen(d, userPaths[0]))
 
 class DeployCurrentFileCommand(DeployZipCommand):
+	def is_enabled(self):
+		self.start()
+		return DeployZipCommand.is_enabled(self)
+
+	def start(self):
+		"""Load the current file when run, or checking if runnable"""
+		self.currentFile = self.window.active_view().file_name()
+
 	def getProjectFolders(self):
 		allFolders = DeployZipCommand.getProjectFolders(self)
-		return [self.currentFile.startswith(folder) for folder in allFolders]
+		return [folder for folder in allFolders if self.currentFile.startswith(folder)]
 
 	def onDriveChosen(self, drive, target):
-		with f = fopen(os.path.join(target, config.json), 'r+')
-		config = json.load(f)
-		config["execute"] = self.currentFile
-		json.dump(config, f)
-		pass
+		configPath = os.path.join(target, 'config.json')
+		config = None
+		with open(configPath, 'r') as f:
+			config = json.load(f)
+		
+		config["execute"] = '.'.join(self.currentFile[len(target)+1:-3].split('\\'))
+
+		with open(configPath, 'w') as f:
+			json.dump(config, f, indent=4)
+
+		DeployZipCommand.onDriveChosen(self, drive, target)
 
 	def run(self):
-		self.currentFile = self.window.active_view().file_name()
+		self.start()
 		DeployZipCommand.run(self)
 
 
@@ -216,12 +233,12 @@ class ShowLogCommand(sublime_plugin.WindowCommand):
 	A command that shows the Student Robotics logs from a given flash drive
 	"""
 	def _output_to_view(self, output_file, output, clear=False):
-			edit = output_file.begin_edit()
-			if clear:
-				region = sublime.Region(0, self.output_view.size())
-				output_file.erase(edit, region)
-			output_file.insert(edit, 0, output)
-			output_file.end_edit(edit)
+		edit = output_file.begin_edit()
+		if clear:
+			region = sublime.Region(0, self.output_view.size())
+			output_file.erase(edit, region)
+		output_file.insert(edit, 0, output)
+		output_file.end_edit(edit)
 
 	def scratch(self, output, title=False, **kwargs):
 		scratch_file = self.window.new_file()
