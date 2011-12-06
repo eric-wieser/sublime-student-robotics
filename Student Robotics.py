@@ -10,6 +10,7 @@ import zipfile
 import fnmatch
 import re
 import glob
+import json
 
 WINDOWS = os.name == 'nt'
 if WINDOWS:
@@ -97,17 +98,20 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 
 	def __init__(self, *args, **kwargs):
 		self.tmpd = None
+		self.settings = None
 		sublime_plugin.WindowCommand.__init__(self, *args, **kwargs)
 
-	def makeZip(self, userCodePath, ignorePatterns = []):
+	def makeZip(self, userCodePath):
 		"""
 		Build a SR zip from the specified user code, by copying the code into
 		a pre-configured zip stored in the plugin folder, and store it in a
 		temporary directory. This zip should be updated regularly
 		"""
 
-		#Transform ignorePatterns (globs) to regular expressions
-		ignore = re.compile(r'|'.join(map(fnmatch.translate, ignorePatterns)) or r'$.')
+		#Transform globs to regular expressions
+		ignoreGlobs = self.settings.get('ignore')
+		ignoreRegex = re.compile(r'|'.join(map(fnmatch.translate, ignoreGlobs)) or r'$.')
+
 		rootlen = len(userCodePath) + 1
 
 		#Make a temporary folder
@@ -122,8 +126,8 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 
 		for root, dirs, files in os.walk(userCodePath):
 			# exclude files and dirs - colon syntax actually modifies the array
-			dirs[:] = [d for d in dirs if not ignore.match(d)]
-			files = [f for f in files if not ignore.match(f)]
+			dirs[:] = [d for d in dirs if not ignoreRegex.match(d)]
+			files = [f for f in files if not ignoreRegex.match(f)]
 
 			#Make full paths
 
@@ -133,30 +137,8 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 
 		return zipPath
 
-	def run(self):
-		s = sublime.load_settings('Student Robotics.sublime-settings')
-		ignorePatterns = s.get('ignore')
-
-		drives = RobotDrive.getDrives(s.get('ignore-drives'))
-
-		if not drives:
-			sublime.error_message('Is the USB stick plugged in?')
-			return
-
-		#Find potential code locations
-		userPaths = [
-			folder
-			for folder in self.window.folders()
-			if path.exists(path.join(folder, '.git')) and path.exists(path.join(folder, 'robot.py'))
-		]
-		
-		if not userPaths:
-			sublime.error_message('You need to open your project folder in the folder view')
-			return
-		
-		sublime.status_message('Exporting from %s...'%userPaths[0])
-
-		#Build the messages for the quickpanel
+	def showDriveList(self, drives, callback):
+		"""Present the user with a choice of the drives available"""
 		messages = []
 		for drive in drives:			
 			title = 'Deploy to %s' % drive
@@ -175,17 +157,58 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 
 			messages.append([title, ' - '.join(info)])
 
-		def onDriveChosen(x):
-			if x >= 0:
-				drive = drives[x]
-				theZip = self.makeZip(
-					userPaths[0],
-					ignorePatterns
-				)
-				shutil.copyfile(theZip, drive.zipPath)
-				shutil.rmtree(self.tmpd)
-				sublime.status_message('Zip deployed successfully to %s!' % drive.zipPath)
-		self.window.show_quick_panel(messages, onDriveChosen)
+		self.window.show_quick_panel(messages, lambda x: callback(drives[x]) if x >= 0 else None)
+
+	def getProjectFolders(self):
+		"""Find potential SR code locations"""
+		return [
+			folder
+			for folder in self.window.folders()
+			if path.exists(path.join(folder, '.git')) and path.exists(path.join(folder, 'robot.py'))
+		]
+
+	def onDriveChosen(self, drive, target):
+		theZip = self.makeZip(target)
+		shutil.copyfile(theZip, drive.zipPath)
+		shutil.rmtree(self.tmpd)
+		sublime.status_message('Zip deployed successfully to %s!' % drive.zipPath)
+
+
+	def run(self):
+		self.settings = sublime.load_settings('Student Robotics.sublime-settings')
+
+		#Find drives
+		drives = RobotDrive.getDrives(self.settings.get('ignore-drives'))
+		if not drives:
+			sublime.error_message('Is the USB stick plugged in?')
+			return
+
+		#Find potential code locations
+		userPaths = self.getProjectFolders()
+		if not userPaths:
+			sublime.error_message('You need to open your project folder in the folder view')
+			return
+		
+		sublime.status_message('Exporting from %s...'%userPaths[0])
+
+		self.showDriveList(drives, lambda d: self.onDriveChosen(d, userPaths[0]))
+
+class DeployCurrentFileCommand(DeployZipCommand):
+	def getProjectFolders(self):
+		allFolders = DeployZipCommand.getProjectFolders(self)
+		return [self.currentFile.startswith(folder) for folder in allFolders]
+
+	def onDriveChosen(self, drive, target):
+		with f = fopen(os.path.join(target, config.json), 'r+')
+		config = json.load(f)
+		config["execute"] = self.currentFile
+		json.dump(config, f)
+		pass
+
+	def run(self):
+		self.currentFile = self.window.active_view().file_name()
+		DeployZipCommand.run(self)
+
 
 class ShowLogCommand(sublime_plugin.WindowCommand):
 	LOG_HEADING_WIDTH = 80

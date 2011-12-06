@@ -1,4 +1,5 @@
 [
     { "caption": "Student Robotics: Deploy zip", "command": "deploy_zip" },
+    { "caption": "Student Robotics: Deploy Current File", "command": "deploy_current_file" },
     { "caption": "Student Robotics: Show Logs", "command": "show_log" }
 ]
