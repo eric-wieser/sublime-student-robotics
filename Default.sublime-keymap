@@ -1,1 +1,5 @@
-[{"keys": ["ctrl+alt+b"], "command": "deploy_zip"}]
+[
+	{"keys": ["ctrl+alt+b"], "command": "deploy_zip"},
+	{"keys": ["ctrl+alt+shift+b"], "command": "deploy_current_file"}
+
+]
