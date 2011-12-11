@@ -1,5 +1,1 @@
-{
-	"url": "https://github.com/eric-wieser/sublime-student-robotics",
-	"description": "Builds the robot.zip, and shows log files",
-	"name": "Student Robotics Tools"
-}
+{"url": "https://github.com/eric-wieser/sublime-student-robotics", "version": "2011.12.08.16.18.25", "description": "Student Robotics Build Script"}

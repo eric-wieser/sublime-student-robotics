@@ -211,9 +211,13 @@ class DeployCurrentFileCommand(DeployZipCommand):
 
 	def onDriveChosen(self, drive, target):
 		configPath = os.path.join(target, 'config.json')
-		config = None
-		with open(configPath, 'r') as f:
-			config = json.load(f)
+		config = {}
+		try:
+			with open(configPath, 'r') as f:
+				config = json.load(f)
+		except:
+			sublime.status_message('config.json not found - creating new file')
+
 		
 		config["execute"] = '.'.join(self.currentFile[len(target)+1:-3].split('\\'))
 
