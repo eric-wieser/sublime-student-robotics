@@ -18,9 +18,6 @@ if WINDOWS:
 
 PLUGIN_DIRECTORY = os.getcwd()
 
-#Apparently needed. We'll see.
-#.replace(os.path.normpath(os.path.join(os.getcwd(), '..', '..')) + os.path.sep, '').replace(os.path.sep, '/')
-
 class Drive(object):
 	@staticmethod
 	def getNameFromPath(path):
@@ -82,7 +79,7 @@ class RobotDrive(Drive):
 		except:
 			self.lastDeployed = None
 
-		self.logs = glob.glob(path.join(self.path, 'log.*'))
+		self.logs = glob.glob(path.join(self.path, 'log.*')) + glob.glob(path.join(self.path, 'old-logs', 'log.*'))
 	
 	@classmethod
 	def getDrives(cls, skip = []):
