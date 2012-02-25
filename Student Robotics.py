@@ -79,7 +79,7 @@ class RobotDrive(Drive):
 		except:
 			self.lastDeployed = None
 
-		self.logs = glob.glob(path.join(self.path, 'log.*')) + glob.glob(path.join(self.path, 'old-logs', 'log.*'))
+		self.logs = glob.glob(path.join(self.path, 'log*')) + glob.glob(path.join(self.path, 'old-logs', 'log*'))
 	
 	@classmethod
 	def getDrives(cls, skip = []):
