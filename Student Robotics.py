@@ -216,7 +216,7 @@ class DeployCurrentFileCommand(DeployZipCommand):
 			sublime.status_message('config.json not found - creating new file')
 
 		
-		config["execute"] = '.'.join(self.currentFile[len(target)+1:-3].split('\\'))
+		config["execute"] = '.'.join(re.split(r'\\|/', self.currentFile[len(target)+1:-3]))
 
 		with open(configPath, 'w') as f:
 			json.dump(config, f, indent=4)
