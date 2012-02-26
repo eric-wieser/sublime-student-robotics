@@ -189,9 +189,18 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 			sublime.error_message('You need to open your project folder in the folder view')
 			return
 		
-		sublime.status_message('Exporting from %s...'%userPaths[0])
+		thePath = None
+		
+		for path in userPaths:
+			if self.currentFile.startswith(path):
+				path = folder
+				break
+		else:
+			path = userPaths[0]
+		
+		sublime.status_message('Exporting from %s...'%path)
 
-		self.showDriveList(drives, lambda d: self.onDriveChosen(d, userPaths[0]))
+		self.showDriveList(drives, lambda d: self.onDriveChosen(d, path))
 
 class DeployCurrentFileCommand(DeployZipCommand):
 	def is_enabled(self):
