@@ -193,7 +193,7 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 		
 		for path in userPaths:
 			if self.currentFile.startswith(path):
-				path = folder
+				thePath = path
 				break
 		else:
 			path = userPaths[0]
