@@ -1,4 +1,4 @@
 {
-	"ignore": [".git", ".gitignore", ".gitmodules", "*.zip"],
+	"ignore": [".git", ".gitignore", ".gitmodules", "*.zip", "sr.py"],
 	"ignore-drives": ["A"]
 }
