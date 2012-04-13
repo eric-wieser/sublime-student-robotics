@@ -196,20 +196,34 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 				thePath = path
 				break
 		else:
-			path = userPaths[0]
+			thePath = userPaths[0]
 		
-		sublime.status_message('Exporting from %s...'%path)
+		sublime.status_message('Exporting from %s...'%thePath)
 
-		self.showDriveList(drives, lambda d: self.onDriveChosen(d, path))
+		self.showDriveList(drives, lambda d: self.onDriveChosen(d, thePath))
 
 class DeployCurrentFileCommand(DeployZipCommand):
 	def is_enabled(self):
+		self.currentFile = ''
 		self.start()
 		return DeployZipCommand.is_enabled(self)
 
 	def start(self):
 		"""Load the current file when run, or checking if runnable"""
-		self.currentFile = self.window.active_view().file_name()
+		v = self.window.active_view()
+		if v.is_dirty():
+			save = sublime.ok_cancel_dialog("File not saved! Save?")
+			if save:
+				v.run_command("save")
+			else:
+				return False
+		if not v.find(r'^def main\(\):', 0):
+			sublime.error_message("Can't deploy - no main method found!")
+			return False
+
+		self.currentFile = v.file_name()
+		return True
+
 
 	def getProjectFolders(self):
 		allFolders = DeployZipCommand.getProjectFolders(self)
@@ -233,8 +247,8 @@ class DeployCurrentFileCommand(DeployZipCommand):
 		DeployZipCommand.onDriveChosen(self, drive, target)
 
 	def run(self):
-		self.start()
-		DeployZipCommand.run(self)
+		if self.start():
+			DeployZipCommand.run(self)
 
 
 class ShowLogCommand(sublime_plugin.WindowCommand):
