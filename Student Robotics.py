@@ -217,7 +217,7 @@ class DeployCurrentFileCommand(DeployZipCommand):
 				v.run_command("save")
 			else:
 				return False
-		if not v.find(r'^def main\(\):', 0):
+		if not v.find(r'^def main\(.*\):', 0):
 			sublime.error_message("Can't deploy - no main method found!")
 			return False
 
