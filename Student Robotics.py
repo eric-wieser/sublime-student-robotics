@@ -204,26 +204,17 @@ class DeployZipCommand(sublime_plugin.WindowCommand):
 
 class DeployCurrentFileCommand(DeployZipCommand):
 	def is_enabled(self):
-		self.currentFile = ''
+		self.currentView = None
 		self.start()
 		return DeployZipCommand.is_enabled(self)
 
+	@property
+	def currentFile(self):
+		return self.currentView.file_name() if self.currentView else ''
+
 	def start(self):
 		"""Load the current file when run, or checking if runnable"""
-		v = self.window.active_view()
-		if v.is_dirty():
-			save = sublime.ok_cancel_dialog("File not saved! Save?")
-			if save:
-				v.run_command("save")
-			else:
-				return False
-		if not v.find(r'^def main\(.*\):', 0):
-			sublime.error_message("Can't deploy - no main method found!")
-			return False
-
-		self.currentFile = v.file_name()
-		return True
-
+		self.currentView = self.window.active_view()
 
 	def getProjectFolders(self):
 		allFolders = DeployZipCommand.getProjectFolders(self)
@@ -248,6 +239,16 @@ class DeployCurrentFileCommand(DeployZipCommand):
 
 	def run(self):
 		if self.start():
+			if self.currentView.is_dirty():
+				if sublime.ok_cancel_dialog("File not saved! Save?"):
+					self.currentView.run_command("save")
+				else:
+					return
+
+			if not self.currentView.find(r'^def main\(.*\):', 0):
+				sublime.error_message("Can't deploy - no main method found!")
+				return
+
 			DeployZipCommand.run(self)
 
 
